@@ -27,7 +27,10 @@ export default function LinkForm({ onSubmit, loading }) {
         <input
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            if (error) setError('');
+          }}
           placeholder="https://www.youtube.com/watch?v=..."
           disabled={loading}
           aria-label="YouTube video URL"

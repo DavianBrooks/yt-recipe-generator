@@ -80,13 +80,22 @@ export default function App() {
       </header>
 
       <nav className="tabs">
-        <button className={tab === 'generate' ? 'active' : ''} onClick={() => setTab('generate')}>
+        <button
+          className={tab === 'generate' ? 'active' : ''}
+          onClick={() => {
+            setError('');
+            setNotice('');
+            setTab('generate');
+          }}
+        >
           Generate
         </button>
         <button
           className={tab === 'saved' ? 'active' : ''}
           onClick={() => {
             setSelected(null);
+            setError('');
+            setNotice('');
             setTab('saved');
           }}
         >
