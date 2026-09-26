@@ -76,7 +76,7 @@ Errors — always `{ "error": "<human-readable message>" }`:
 |---|---|---|
 | `GET youtube.com/oembed?url=…&format=json` | channel title + thumbnail | none |
 | `YoutubeTranscript.fetchTranscript(videoId)` | full caption text | none |
-| `POST api.openai.com/v1/chat/completions` | transcript → structured JSON | `OPENAI_API_KEY` |
+| `POST $OPENAI_BASE_URL/chat/completions` (default api.openai.com) | transcript → structured JSON | `OPENAI_API_KEY` |
 
 OpenAI settings: model `OPENAI_MODEL` env or `gpt-4o-mini`, `response_format: {type: "json_object"}`, `temperature: 0.2`, transcript capped at 24,000 chars (~90–120 min of speech) to bound cost/latency. The system prompt forbids inventing quantities — unknown fields come back as `""`.
 
@@ -132,6 +132,7 @@ App.jsx                      state machine: tab | recipe | selected | loading/sa
 | `VITE_FIREBASE_AUTH_DOMAIN` | `src/lib/firebase.js` | client; optional, defaults to `<project-id>.firebaseapp.com` |
 | `OPENAI_API_KEY` | `extract-recipe.mjs` | server only |
 | `OPENAI_MODEL` | `extract-recipe.mjs` | server only; optional, default `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | `extract-recipe.mjs` | server only; optional, default `https://api.openai.com/v1` — set to any OpenAI-compatible endpoint (e.g. `https://api.groq.com/openai/v1`) |
 
 `netlify.toml`: `command = "npm run build"`, `publish = "dist"`, `functions = "netlify/functions"`, plus a non-forced `/* → /index.html` SPA fallback (function routes resolve before redirects, so `/.netlify/functions/*` is unaffected).
 

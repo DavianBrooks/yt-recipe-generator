@@ -82,6 +82,8 @@ VITE_FIREBASE_APP_ID=<Firebase appId>
 OPENAI_API_KEY=<your OpenAI key>
 ```
 
+Any OpenAI-compatible endpoint works — set `OPENAI_BASE_URL` + `OPENAI_MODEL` to use Groq, Gemini, OpenRouter, etc. instead of OpenAI.
+
 ### 4. Run locally
 
 The function and front-end run together via the Netlify CLI:
