@@ -12,7 +12,7 @@
        ▼                        │  4. OpenAI chat completion    │
 ┌──────────────┐                │     (JSON mode)               │
 │  Firestore   │                └───────────────────────────────┘
-│  recipes collection
+│  recipes + anon Auth
 └──────────────┘
 ```
 
@@ -76,6 +76,7 @@ Errors — always `{ "error": "<human-readable message>" }`:
 |---|---|---|
 | `GET youtube.com/oembed?url=…&format=json` | channel title + thumbnail | none |
 | `YoutubeTranscript.fetchTranscript(videoId)` | full caption text | none |
+| `youtubei.js` stream + `POST $OPENAI_BASE_URL/audio/transcriptions` | Whisper fallback when captions are missing (best-effort — YouTube may require a PoToken on datacenter IPs; `WHISPER_MODEL` env, default `whisper-large-v3-turbo`) | `OPENAI_API_KEY` |
 | `POST $OPENAI_BASE_URL/chat/completions` (default api.openai.com) | transcript → structured JSON | `OPENAI_API_KEY` |
 
 OpenAI settings: model `OPENAI_MODEL` env or `gpt-4o-mini`, `response_format: {type: "json_object"}`, `temperature: 0.2`, transcript capped at 24,000 chars (~90–120 min of speech) to bound cost/latency. The system prompt forbids inventing quantities — unknown fields come back as `""`.
@@ -93,34 +94,41 @@ Collection: **`recipes`** — created automatically on first save (Firestore is 
 | `steps` | Array\<Object\> `{order, instruction, duration}` | LLM |
 | `tags` | Array\<String\> | LLM |
 | `videoId`, `videoUrl`, `channelTitle`, `thumbnail` | String | function (oEmbed) |
-| `createdAt` | Timestamp (`serverTimestamp()`) | Firestore |
+| `uid` | String | Firebase anonymous auth — owner of the cookbook entry |
+| `shared` | Bool | set by the Share button; enables public read via `?r=<id>` |
+| `createdAt` | Number (`Date.now()`) | client |
 
-The document ID (`doc.id`) is used as the recipe's `id` in the UI.
+The document ID (`doc.id`) is used as the recipe's `id` in the UI and as the share-link token.
 
-Queries used: `query(collection(db,'recipes'), orderBy('createdAt','desc'), limit(100))`, `addDoc`, `deleteDoc`.
+Queries used: `where('uid','==',uid)` + client-side sort (avoids composite indexes), `where('videoId','==',id)` for the extraction cache, `addDoc`, `updateDoc` (share), `deleteDoc`, `getDoc` (shared read).
 
-**Suggested rules**: the README's test-mode setup allows open read/write for 30 days — fine for a demo. For anything longer, scope reads/writes behind Firebase Auth (`allow read, write: if request.auth != null`).
+**Rules** (`firestore.rules`, publish in the console): owners read/write their own `uid` docs; `shared == true` docs are world-readable; creates must stamp the caller's uid.
 
 ## 4. Front-end component breakdown
 
 ```
-App.jsx                      state machine: tab | recipe | selected | loading/saving/error
+App.jsx                      state machine + ?r= shared-view route + cache check
 ├── LinkForm.jsx             controlled input; regex-validates YouTube host before submit
-├── RecipeView.jsx           pure renderer; props: recipe, onSave, saving, saved, savedView
-│                            (savedView hides the save button for cookbook entries)
-└── SavedRecipes.jsx         grid; props: recipes, onSelect, onDelete, dbReady
+├── RecipeView.jsx           renderer + Edit mode (draft state) + Share + Print buttons;
+│                            props: recipe, onSave(recipe|draft), onShare, savedView
+└── SavedRecipes.jsx         grid + search box + cuisine/tag filters; props: recipes,
+                             onSelect, onDelete, dbReady
 ```
 
-`src/lib/firebase.js` — single Firebase app + Firestore init; exports `firebaseConfigured` flag so the UI degrades gracefully (generate still works, cookbook explains the missing config) instead of crashing.
+`src/lib/firebase.js` — single Firebase app + anonymous Auth + Firestore init; exports `authReady()` (resolves after `signInAnonymously` settles) and `currentUid()`. `firebaseConfigured` still lets the UI degrade gracefully.
+
+`src/lib/videoId.js` — shared YouTube URL parser imported by both the SPA and the Netlify function.
 
 `src/api.js` — the only import site for Firestore operations + the function call. Components never touch `fetch` or `firebase/firestore` directly.
 
 ### Data flow
 
-1. `LinkForm` → `App.handleGenerate(url)` → `api.extractRecipe` → `POST` function.
-2. Response stored in `recipe` state → `RecipeView` renders.
-3. `handleSave` → `api.saveRecipe(recipe)` → `addDoc` into `recipes` → `saved` flag disables the button.
-4. "My cookbook" tab → `listSavedRecipes` → grid; `onSelect` → `RecipeView` in `savedView` mode; `onDelete` → `deleteDoc` + local list filter.
+1. `LinkForm` → `App.handleGenerate(url)` → `api.findCachedRecipe(url)` first — a `uid`+`videoId` Firestore hit skips the LLM entirely ("loaded it instantly" notice) → else `api.extractRecipe` → `POST` function.
+2. Response stored in `recipe` state → `RecipeView` renders; **Edit** swaps renderers for inputs bound to a `draft` state, so `onSave(draft)` persists user corrections.
+3. `handleSave` → `api.saveRecipe` → `addDoc` with `{uid, shared:false, createdAt:Date.now()}`.
+4. "My cookbook" tab → `listSavedRecipes` (uid-scoped) → grid with search + cuisine/tag filters; `onSelect` → `RecipeView` in `savedView` mode; `onDelete` → `deleteDoc`.
+5. **Share** on a saved recipe → `updateDoc {shared:true}` → copies `?r=<docId>`; a visitor hitting that URL loads `getSharedRecipe` (allowed by the rules without auth) into a standalone read view.
+6. **Print / PDF** → `window.print()` + `@media print` CSS isolates `.recipe-card` and hides chrome.
 
 ## 5. Configuration reference
 
@@ -133,13 +141,14 @@ App.jsx                      state machine: tab | recipe | selected | loading/sa
 | `OPENAI_API_KEY` | `extract-recipe.mjs` | server only |
 | `OPENAI_MODEL` | `extract-recipe.mjs` | server only; optional, default `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | `extract-recipe.mjs` | server only; optional, default `https://api.openai.com/v1` — set to any OpenAI-compatible endpoint (e.g. `https://api.groq.com/openai/v1`) |
+| `WHISPER_MODEL` | `extract-recipe.mjs` | server only; optional, default `whisper-large-v3-turbo` (`whisper-1` on OpenAI) |
 
 `netlify.toml`: `command = "npm run build"`, `publish = "dist"`, `functions = "netlify/functions"`, plus a non-forced `/* → /index.html` SPA fallback (function routes resolve before redirects, so `/.netlify/functions/*` is unaffected).
 
 ## 6. Known limits & future work
 
-- Requires captions: auto-generated ones are fine; caption-free videos return 422 by design. A Whisper-based audio pipeline is the natural upgrade.
+- Caption-less videos fall back to audio transcription (Whisper), but YouTube increasingly requires a proof-of-origin token on stream URLs fetched from datacenter IPs — the fallback is best-effort and degrades to a clear 422. A residential proxy or PoToken service would make it reliable.
 - YouTube rate-limits/blocks some datacenter IPs on the captions endpoint, so extraction can occasionally fail on otherwise-captioned videos — retrying or running the function elsewhere (e.g. locally) often succeeds.
 - One recipe per video; multi-dish videos return the dominant recipe.
-- No user accounts — all saved recipes are shared at app level.
-- Rate limiting/caching (e.g., memoize extractions by `videoId`) is not implemented.
+- Cookbooks are per-browser via anonymous Auth — no email/password sign-in yet, so a cookbook doesn't follow a user across devices (Firebase Auth upgrade path is one provider toggle).
+- The `videoId` cache is per-user; a global extraction cache would need a separate `videoCache` collection readable by all.

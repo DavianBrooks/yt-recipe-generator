@@ -11,9 +11,14 @@ Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline),
 - Submit any valid YouTube URL (watch, share/`youtu.be`, Shorts, embed links)
 - AI extraction of: title, description, servings, prep/cook time, cuisine, difficulty, ingredients (item + quantity + unit + notes), ordered steps with durations, tags
 - Video metadata pulled automatically (channel name, thumbnail, canonical URL)
-- Save recipes to Firestore with one click
-- Browse, reopen, and delete saved recipes in "My cookbook"
-- Friendly errors for non-YouTube URLs, videos without captions, and non-recipe videos
+- Save recipes to Firestore with one click — per-user cookbooks via anonymous Firebase Auth
+- Browse, reopen, and delete saved recipes in "My cookbook" — with search + cuisine/tag filters
+- Edit any recipe field before saving
+- **Share link** per recipe — makes it publicly readable at `?r=<id>` without sign-in
+- **Print / PDF** export of any recipe
+- Re-submitting a video you already generated returns your saved copy instantly (cached by `videoId`, no extra LLM call)
+- Best-effort Whisper audio fallback when a video has no captions
+- Friendly errors for non-YouTube URLs, caption-free videos, and non-recipe videos
 
 ## Tech stack & why
 
@@ -22,7 +27,7 @@ Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline),
 | Front-end | **React 19 + Vite** | Largest ecosystem and community for a beginner project; Vite gives instant dev server + one-command build; pairs natively with Netlify. |
 | AI processing | **YouTube captions + OpenAI (`gpt-4o-mini`)** | Captions (`youtube-transcript`) are free and fast; the LLM turns unstructured narration into strict JSON via `response_format: json_object`. |
 | API | **Netlify Function** (`netlify/functions/extract-recipe.mjs`) | Keeps `OPENAI_API_KEY` server-side; zero server management; deploys with the site. |
-| Database | **Firebase Cloud Firestore** | Managed NoSQL with a JS SDK and a free tier; no schema migrations — the `recipes` collection is created on first save. |
+| Database | **Firebase Cloud Firestore + Auth** | Managed NoSQL with a JS SDK and a free tier; anonymous sign-in scopes every cookbook to a stable uid with no login wall. |
 | Hosting | **Netlify** | Free static hosting + serverless functions + env-var management in one place. |
 
 ## Architecture
@@ -63,7 +68,9 @@ npm install
 
 1. Sign in at https://console.firebase.google.com → **Add project** → name it (e.g. `yt-recipes`) → continue (Analytics optional) → **Create project**.
 2. On the project page, click the **web icon `</>`** to register a web app → name it → **Register app**. The `firebaseConfig` shown contains the values you need: `apiKey`, `projectId`, `appId`.
-3. Left sidebar → **Build → Firestore Database** → **Create database** → pick a location → **Start in test mode** (allows public read/write for 30 days — fine for a demo; tighten rules later).
+3. Left sidebar → **Build → Firestore Database** → **Create database** → pick a location → **Start in test mode**.
+4. **Build → Authentication → Get started → Sign-in method** → enable **Anonymous** — the app signs every visitor in anonymously so each browser gets its own cookbook.
+5. **Firestore Database → Rules** tab → paste the contents of [`firestore.rules`](firestore.rules) → **Publish**. (Own-cookbook read/write + public read only for recipes explicitly shared.)
 
 No collections are needed up front — the `recipes` collection is created automatically on the first save.
 
@@ -116,9 +123,10 @@ netlify deploy --prod
 ## Usage
 
 1. Paste any YouTube cooking-video URL and click **Generate recipe**.
-2. Review the extracted ingredients and steps.
+2. Review the extracted ingredients and steps — click **Edit** to adjust any field first.
 3. Click **Save to my cookbook**.
-4. Open the **My cookbook** tab to browse, reopen, or delete saved recipes.
+4. Open the **My cookbook** tab to search, filter, reopen, or delete saved recipes.
+5. On a saved recipe: **Share link** copies a public `?r=<id>` URL; **Print / PDF** opens a clean print view.
 
 ## Project structure
 
@@ -126,12 +134,13 @@ netlify deploy --prod
 ├── netlify/
 │   └── functions/extract-recipe.mjs   # YouTube → transcript → OpenAI → JSON
 ├── src/
-│   ├── api.js                         # function call + Firestore CRUD
-│   ├── lib/firebase.js                # Firebase app + Firestore init
+│   ├── api.js                         # function call + Firestore CRUD + share/cache
+│   ├── lib/firebase.js                # Firebase app + Auth + Firestore init
+│   ├── lib/videoId.js                 # YouTube URL → video ID parser (shared)
 │   ├── components/
 │   │   ├── LinkForm.jsx               # URL input + validation
-│   │   ├── RecipeView.jsx             # structured recipe display
-│   │   └── SavedRecipes.jsx           # cookbook grid
+│   │   ├── RecipeView.jsx             # recipe display + edit + share + print
+│   │   └── SavedRecipes.jsx           # cookbook grid + search/filters
 │   ├── App.jsx                        # tabs, state, orchestration
 │   ├── main.jsx
 │   └── index.css
@@ -140,6 +149,7 @@ netlify deploy --prod
 │   ├── TECHNICAL.md                   # API, schema, components
 │   └── DEMO_NOTES.md                  # presentation prep
 ├── netlify.toml
+├── firestore.rules                    # per-user cookbook rules + shared-read
 ├── .env.example
 └── package.json
 ```
@@ -148,9 +158,11 @@ netlify deploy --prod
 
 | Symptom | Fix |
 |---|---|
-| "No captions available" | Pick a video with subtitles/CC enabled — extraction depends on the transcript. |
+| "No captions on this video, and audio transcription failed" | The video has no captions and YouTube blocked the audio fallback (streams from datacenter IPs increasingly require a proof-of-origin token) — pick a video with subtitles/CC. |
 | "OPENAI_API_KEY is not configured" | Set it in `.env` (local) or Netlify env vars (deployed), then restart `netlify dev`. |
 | "Firebase is not configured" | Set the `VITE_FIREBASE_*` vars and rebuild — `VITE_` vars are baked in at build time. |
+| "Sign-in failed" | Enable **Anonymous** under Authentication → Sign-in method. |
+| Save/list permission errors | Publish `firestore.rules` in Firestore → Rules. |
 | Function 404s locally | Use `npx netlify dev`, not `npm run dev`. |
 
 ## Docs
