@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Recipe app rules: users can only read/write their own recipes.
+// A recipe with shared == true is publicly readable (share links).
+// Paste this into Firebase Console → Firestore Database → Rules → Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /recipes/{recipeId} {
+      allow read: if resource.data.shared == true
+                  || (request.auth != null && request.auth.uid == resource.data.uid);
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if request.auth != null
+                    && request.auth.uid == resource.data.uid;
+    }
+  }
+}

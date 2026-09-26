@@ -4,36 +4,20 @@ import {
   YoutubeTranscriptNotAvailableError,
   YoutubeTranscriptVideoUnavailableError,
 } from 'youtube-transcript';
+import { Innertube } from 'youtubei.js';
+import { extractVideoId } from '../../src/lib/videoId.js';
 
-const OPENAI_URL = `${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`;
+const BASE = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+const OPENAI_URL = `${BASE}/chat/completions`;
+const WHISPER_URL = `${BASE}/audio/transcriptions`;
 const MAX_TRANSCRIPT_CHARS = 24000;
+const MAX_AUDIO_BYTES = 22 * 1024 * 1024; // stay under Groq/OpenAI's 25MB upload cap
 
 const json = (statusCode, body) => ({
   statusCode,
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
 });
-
-function extractVideoId(input) {
-  let url;
-  try {
-    url = new URL(input.startsWith('http') ? input : `https://${input}`);
-  } catch {
-    return null;
-  }
-  const host = url.hostname.replace(/^(www\.|m\.)/, '');
-  if (host === 'youtu.be') {
-    const id = url.pathname.slice(1).split('/')[0];
-    return /^[\w-]{11}$/.test(id) ? id : null;
-  }
-  if (host === 'youtube.com') {
-    const v = url.searchParams.get('v');
-    if (v && /^[\w-]{11}$/.test(v)) return v;
-    const m = url.pathname.match(/^\/(shorts|embed|live)\/([\w-]{11})/);
-    if (m) return m[2];
-  }
-  return null;
-}
 
 async function fetchOembed(videoId) {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -56,6 +40,47 @@ async function fetchTranscript(videoId) {
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// No-captions fallback: pull the audio track and transcribe it with Whisper.
+// Works on OpenAI (whisper-1) and Groq (whisper-large-v3-turbo).
+async function transcribeAudio(videoId) {
+  const yt = await Innertube.create();
+  const info = await yt.getInfo(videoId);
+  const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+  if (!format) throw new Error('No audio stream found for this video.');
+  const audioUrl = format.decipher(yt.session.player);
+  const res = await fetch(audioUrl);
+  if (!res.ok || !res.body) throw new Error(`Audio download failed (HTTP ${res.status})`);
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_AUDIO_BYTES) {
+      await reader.cancel();
+      throw new Error('Audio file is too large to transcribe (>22MB).');
+    }
+    chunks.push(value);
+  }
+  const audio = new Blob(chunks, { type: 'audio/mp4' });
+
+  const form = new FormData();
+  form.append('file', audio, 'audio.m4a');
+  form.append('model', process.env.WHISPER_MODEL || 'whisper-large-v3-turbo');
+  const wr = await fetch(WHISPER_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: form,
+  });
+  const wdata = await wr.json().catch(() => ({}));
+  if (!wr.ok) {
+    throw new Error(wdata?.error?.message || `Audio transcription failed (HTTP ${wr.status})`);
+  }
+  return (wdata.text || '').replace(/\s+/g, ' ').trim();
 }
 
 const SYSTEM_PROMPT = `You are a recipe extraction engine. Given the title and transcript of a YouTube cooking video, produce a single structured recipe as JSON.
@@ -154,14 +179,22 @@ export const handler = async (event) => {
       e instanceof YoutubeTranscriptDisabledError ||
       e instanceof YoutubeTranscriptNotAvailableError
     ) {
-      return json(422, {
-        error:
-          'No captions are available for this video (or YouTube is rate-limiting the server). Try a video with subtitles enabled.',
+      // No captions — fall back to transcribing the audio with Whisper.
+      try {
+        transcript = await transcribeAudio(videoId);
+      } catch (we) {
+        return json(422, {
+          error: `No captions on this video, and audio transcription failed (${we.message}). Try a video with subtitles enabled.`,
+        });
+      }
+      if (!transcript) {
+        return json(422, { error: 'Audio transcription produced no text.' });
+      }
+    } else {
+      return json(502, {
+        error: 'Could not fetch the video transcript — YouTube may be blocking server requests.',
       });
     }
-    return json(502, {
-      error: 'Could not fetch the video transcript — YouTube may be blocking server requests.',
-    });
   }
   if (!transcript) {
     return json(422, { error: 'The transcript for this video is empty.' });
