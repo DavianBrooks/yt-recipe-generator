@@ -1,4 +1,15 @@
-import Parse, { parseConfigured } from './lib/parse';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { db, firebaseConfigured } from './lib/firebase';
 
 export async function extractRecipe(videoUrl) {
   const res = await fetch('/.netlify/functions/extract-recipe', {
@@ -13,33 +24,28 @@ export async function extractRecipe(videoUrl) {
   return data;
 }
 
+const NOT_CONFIGURED =
+  'Firebase is not configured. Set VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_APP_ID in your environment.';
+
 export async function saveRecipe(recipe) {
-  if (!parseConfigured) {
-    throw new Error(
-      'Back4App is not configured. Set VITE_PARSE_APP_ID and VITE_PARSE_JS_KEY in your environment.',
-    );
-  }
-  const Recipe = Parse.Object.extend('Recipe');
-  const obj = new Recipe();
-  for (const [key, value] of Object.entries(recipe)) {
-    if (value !== undefined && value !== null) obj.set(key, value);
-  }
-  return obj.save();
+  if (!firebaseConfigured) throw new Error(NOT_CONFIGURED);
+  const clean = Object.fromEntries(
+    Object.entries(recipe).filter(([, v]) => v !== undefined && v !== null),
+  );
+  const ref = await addDoc(collection(db, 'recipes'), {
+    ...clean,
+    createdAt: serverTimestamp(),
+  });
+  return { id: ref.id, ...clean };
 }
 
 export async function listSavedRecipes() {
-  if (!parseConfigured) return [];
-  const Recipe = Parse.Object.extend('Recipe');
-  const query = new Parse.Query(Recipe);
-  query.descending('createdAt');
-  query.limit(100);
-  const results = await query.find();
-  return results.map((r) => ({ objectId: r.id, ...r.toJSON() }));
+  if (!firebaseConfigured) return [];
+  const q = query(collection(db, 'recipes'), orderBy('createdAt', 'desc'), limit(100));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function deleteRecipe(objectId) {
-  const Recipe = Parse.Object.extend('Recipe');
-  const obj = new Recipe();
-  obj.id = objectId;
-  return obj.destroy();
+export async function deleteRecipe(id) {
+  await deleteDoc(doc(db, 'recipes', id));
 }

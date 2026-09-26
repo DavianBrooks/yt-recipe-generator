@@ -3,7 +3,7 @@ import LinkForm from './components/LinkForm';
 import RecipeView from './components/RecipeView';
 import SavedRecipes from './components/SavedRecipes';
 import { deleteRecipe, extractRecipe, listSavedRecipes, saveRecipe } from './api';
-import { parseConfigured } from './lib/parse';
+import { firebaseConfigured } from './lib/firebase';
 
 export default function App() {
   const [tab, setTab] = useState('generate');
@@ -18,7 +18,7 @@ export default function App() {
   const [loadingSaved, setLoadingSaved] = useState(false);
 
   const refreshSaved = useCallback(async () => {
-    if (!parseConfigured) return;
+    if (!firebaseConfigured) return;
     setLoadingSaved(true);
     try {
       setSavedRecipes(await listSavedRecipes());
@@ -62,11 +62,11 @@ export default function App() {
     }
   }
 
-  async function handleDelete(objectId) {
+  async function handleDelete(id) {
     try {
-      await deleteRecipe(objectId);
-      setSavedRecipes((prev) => prev.filter((r) => r.objectId !== objectId));
-      if (selected?.objectId === objectId) setSelected(null);
+      await deleteRecipe(id);
+      setSavedRecipes((prev) => prev.filter((r) => r.id !== id));
+      if (selected?.id === id) setSelected(null);
     } catch (e) {
       setError(e.message);
     }
@@ -130,13 +130,13 @@ export default function App() {
               loading={loadingSaved}
               onSelect={setSelected}
               onDelete={handleDelete}
-              parseReady={parseConfigured}
+              dbReady={firebaseConfigured}
             />
           ))}
       </main>
 
       <footer className="app-footer">
-        <p>AI extraction via YouTube captions + LLM · Storage on Back4App (Parse)</p>
+        <p>AI extraction via YouTube captions + LLM · Storage on Firebase Firestore</p>
       </footer>
     </div>
   );
