@@ -8,11 +8,11 @@
 │  (Vite/dist) │ ◄───────────── │ extract-recipe.mjs            │
 └──────┬───────┘   recipe JSON  │  1. parse video ID            │
        │                        │  2. YouTube oEmbed (metadata) │
-       │ Firebase SDK           │  3. youtube-transcript        │
-       ▼                        │  4. OpenAI chat completion    │
-┌──────────────┐                │     (JSON mode)               │
+       │ Firebase SDK           │  3. youtube-transcript →      │
+       ▼                        │     Whisper audio fallback    │
+┌──────────────┐                │  4. LLM chat (JSON mode)      │
 │  Firestore   │                └───────────────────────────────┘
-│  recipes + anon Auth
+│  recipes + anon Auth         │
 └──────────────┘
 ```
 
