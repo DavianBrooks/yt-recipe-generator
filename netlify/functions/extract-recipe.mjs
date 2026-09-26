@@ -5,7 +5,7 @@ import {
   YoutubeTranscriptVideoUnavailableError,
 } from 'youtube-transcript';
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_URL = `${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`;
 const MAX_TRANSCRIPT_CHARS = 24000;
 
 const json = (statusCode, body) => ({
