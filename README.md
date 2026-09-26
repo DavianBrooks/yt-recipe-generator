@@ -4,14 +4,14 @@ Turn any YouTube cooking video into a clean, structured recipe you can save to a
 
 Paste a YouTube link → the app pulls the video's captions and metadata → an LLM extracts the ingredients, steps, and metadata into structured JSON → review it, save it, and browse your cookbook later.
 
-Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline), and **Back4App (Parse Server)** for storage.
+Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline), and **Firebase Cloud Firestore** for storage.
 
 ## Features
 
 - Submit any valid YouTube URL (watch, share/`youtu.be`, Shorts, embed links)
 - AI extraction of: title, description, servings, prep/cook time, cuisine, difficulty, ingredients (item + quantity + unit + notes), ordered steps with durations, tags
 - Video metadata pulled automatically (channel name, thumbnail, canonical URL)
-- Save recipes to Back4App with one click
+- Save recipes to Firestore with one click
 - Browse, reopen, and delete saved recipes in "My cookbook"
 - Friendly errors for non-YouTube URLs, videos without captions, and non-recipe videos
 
@@ -22,7 +22,7 @@ Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline),
 | Front-end | **React 19 + Vite** | Largest ecosystem and community for a beginner project; Vite gives instant dev server + one-command build; pairs natively with Netlify. |
 | AI processing | **YouTube captions + OpenAI (`gpt-4o-mini`)** | Captions (`youtube-transcript`) are free and fast; the LLM turns unstructured narration into strict JSON via `response_format: json_object`. |
 | API | **Netlify Function** (`netlify/functions/extract-recipe.mjs`) | Keeps `OPENAI_API_KEY` server-side; zero server management; deploys with the site. |
-| Database | **Back4App (Parse Server)** | Managed MongoDB with a JS SDK and a free tier; no schema migrations — the `Recipe` class is created on first save. |
+| Database | **Firebase Cloud Firestore** | Managed NoSQL with a JS SDK and a free tier; no schema migrations — the `recipes` collection is created on first save. |
 | Hosting | **Netlify** | Free static hosting + serverless functions + env-var management in one place. |
 
 ## Architecture
@@ -37,15 +37,15 @@ Netlify Function ──► YouTube (oEmbed + captions)
 Structured recipe JSON ──► rendered in RecipeView
    │  "Save to my cookbook"
    ▼
-Back4App Parse  (Recipe class)
+Firebase Firestore  (recipes collection)
 ```
 
-The browser never talks to OpenAI or YouTube directly — all external calls happen inside the function, so the only secret on the client is the Back4App JavaScript key (which is designed to be public; protect data with class-level permissions instead).
+The browser never talks to OpenAI or YouTube directly — all external calls happen inside the function, so the only credentials on the client are the Firebase web config values (which are designed to be public; protect data with Firestore Security Rules instead).
 
 ## Prerequisites
 
 - Node.js ≥ 20.19 (or ≥ 22.12) and npm
-- A free [Back4App](https://www.back4app.com) account
+- A free [Firebase](https://console.firebase.google.com) project (Spark plan)
 - An [OpenAI API key](https://platform.openai.com/api-keys)
 - (Deploy only) a [Netlify](https://netlify.com) account
 
@@ -59,11 +59,13 @@ cd yt-recipe-generator
 npm install
 ```
 
-### 2. Create the Back4App app
+### 2. Create the Firebase project
 
-1. Sign in at https://www.back4app.com → **Build new app** → name it (e.g. `yt-recipes`).
-2. Go to **App Settings → Security & Keys**.
-3. Copy the **Application ID** and the **JavaScript Key** (client key). No database classes are needed up front — the `Recipe` class is created automatically on the first save.
+1. Sign in at https://console.firebase.google.com → **Add project** → name it (e.g. `yt-recipes`) → continue (Analytics optional) → **Create project**.
+2. On the project page, click the **web icon `</>`** to register a web app → name it → **Register app**. The `firebaseConfig` shown contains the values you need: `apiKey`, `projectId`, `appId`.
+3. Left sidebar → **Build → Firestore Database** → **Create database** → pick a location → **Start in test mode** (allows public read/write for 30 days — fine for a demo; tighten rules later).
+
+No collections are needed up front — the `recipes` collection is created automatically on the first save.
 
 ### 3. Configure environment variables
 
@@ -74,9 +76,9 @@ cp .env.example .env
 Fill in `.env`:
 
 ```bash
-VITE_PARSE_APP_ID=<Back4App Application ID>
-VITE_PARSE_JS_KEY=<Back4App JavaScript Key>
-VITE_PARSE_SERVER_URL=https://parseapi.back4app.com
+VITE_FIREBASE_API_KEY=<Firebase apiKey>
+VITE_FIREBASE_PROJECT_ID=<Firebase projectId>
+VITE_FIREBASE_APP_ID=<Firebase appId>
 OPENAI_API_KEY=<your OpenAI key>
 ```
 
@@ -103,9 +105,9 @@ npm install -g netlify-cli
 netlify login
 netlify init          # link the repo directory to a new site
 netlify env:set OPENAI_API_KEY "..."
-netlify env:set VITE_PARSE_APP_ID "..."
-netlify env:set VITE_PARSE_JS_KEY "..."
-netlify env:set VITE_PARSE_SERVER_URL "https://parseapi.back4app.com"
+netlify env:set VITE_FIREBASE_API_KEY "..."
+netlify env:set VITE_FIREBASE_PROJECT_ID "..."
+netlify env:set VITE_FIREBASE_APP_ID "..."
 netlify deploy --prod
 ```
 
@@ -122,8 +124,8 @@ netlify deploy --prod
 ├── netlify/
 │   └── functions/extract-recipe.mjs   # YouTube → transcript → OpenAI → JSON
 ├── src/
-│   ├── api.js                         # function call + Parse CRUD
-│   ├── lib/parse.js                   # Parse SDK init
+│   ├── api.js                         # function call + Firestore CRUD
+│   ├── lib/firebase.js                # Firebase app + Firestore init
 │   ├── components/
 │   │   ├── LinkForm.jsx               # URL input + validation
 │   │   ├── RecipeView.jsx             # structured recipe display
@@ -146,7 +148,7 @@ netlify deploy --prod
 |---|---|
 | "No captions available" | Pick a video with subtitles/CC enabled — extraction depends on the transcript. |
 | "OPENAI_API_KEY is not configured" | Set it in `.env` (local) or Netlify env vars (deployed), then restart `netlify dev`. |
-| "Back4App is not configured" | Set `VITE_PARSE_*` vars and rebuild — `VITE_` vars are baked in at build time. |
+| "Firebase is not configured" | Set the `VITE_FIREBASE_*` vars and rebuild — `VITE_` vars are baked in at build time. |
 | Function 404s locally | Use `npx netlify dev`, not `npm run dev`. |
 
 ## Docs

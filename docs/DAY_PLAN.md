@@ -25,16 +25,16 @@ A beginner-friendly, day-by-day plan for building this project. Day 1 = **Thursd
 
 | Task | Details | Est. |
 |---|---|---|
-| 2.1 | Create Back4App app; copy Application ID + JavaScript Key into `.env` | 30 min |
+| 2.1 | Create Firebase project + web app + Firestore (test mode); copy apiKey/projectId/appId into `.env` | 30 min |
 | 2.2 | Write `src/lib/parse.js` (SDK init) and `src/api.js` (`extractRecipe`, `saveRecipe`, `listSavedRecipes`, `deleteRecipe`) | 45 min |
 | 2.3 | Write `netlify/functions/extract-recipe.mjs`: URL → video ID → oEmbed metadata → captions via `youtube-transcript` | 90 min |
 | 2.4 | Add the OpenAI call: system prompt + `response_format: json_object` → validated recipe JSON | 60 min |
 | 2.5 | `npm i parse youtube-transcript`; run `npx netlify dev`; test with 3–4 real cooking videos | 60 min |
-| 2.6 | Wire Save → Back4App; verify rows appear in the Back4App dashboard's `Recipe` class | 30 min |
+| 2.6 | Wire Save → Firestore; verify docs appear in the Firestore console's `recipes` collection | 30 min |
 | 2.7 | Error handling pass: bad URL, no captions, non-recipe video, missing keys | 45 min |
 | 2.8 | Commit on `feature/ai-extraction`, open PR, merge | 15 min |
 
-**Milestone 2:** paste a real YouTube link → structured recipe → save → see it in "My cookbook" and in the Back4App dashboard.
+**Milestone 2:** paste a real YouTube link → structured recipe → save → see it in "My cookbook" and in the Firestore console.
 
 ## Day 3 — Deploy, Docs & Demo Prep (Sept 27)
 
