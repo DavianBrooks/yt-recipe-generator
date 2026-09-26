@@ -44,12 +44,17 @@ async function fetchTranscript(videoId) {
 
 // No-captions fallback: pull the audio track and transcribe it with Whisper.
 // Works on OpenAI (whisper-1) and Groq (whisper-large-v3-turbo).
+// Best-effort: YouTube increasingly requires a proof-of-origin token on
+// streams fetched from datacenter IPs, so this may fail on some videos —
+// the caller surfaces a clear error in that case.
 async function transcribeAudio(videoId) {
   const yt = await Innertube.create();
   const info = await yt.getInfo(videoId);
   const format = info.chooseFormat({ type: 'audio', quality: 'best' });
   if (!format) throw new Error('No audio stream found for this video.');
-  const audioUrl = format.decipher(yt.session.player);
+  const audioUrl =
+    format.url || (await format.decipher(yt.session.player));
+  if (!audioUrl) throw new Error('Could not resolve an audio stream URL.');
   const res = await fetch(audioUrl);
   if (!res.ok || !res.body) throw new Error(`Audio download failed (HTTP ${res.status})`);
 
