@@ -8,18 +8,18 @@
 │  (Vite/dist) │ ◄───────────── │ extract-recipe.mjs            │
 └──────┬───────┘   recipe JSON  │  1. parse video ID            │
        │                        │  2. YouTube oEmbed (metadata) │
-       │ Parse JS SDK           │  3. youtube-transcript        │
+       │ Firebase SDK           │  3. youtube-transcript        │
        ▼                        │  4. OpenAI chat completion    │
 ┌──────────────┐                │     (JSON mode)               │
-│  Back4App    │                └───────────────────────────────┘
-│  Parse: Recipe class
+│  Firestore   │                └───────────────────────────────┘
+│  recipes collection
 └──────────────┘
 ```
 
 Two trust boundaries matter:
 
 - **`OPENAI_API_KEY` lives only in the function.** The browser never sees it.
-- **`VITE_PARSE_*` keys ship to the client by design.** Back4App's JavaScript key is a public client credential — data protection comes from Parse Class-Level Permissions, not key secrecy. For a stricter model, set CLPs on the `Recipe` class in the Back4App dashboard.
+- **`VITE_FIREBASE_*` values ship to the client by design.** The Firebase web config (`apiKey`, `projectId`, `appId`) is a public client credential — data protection comes from Firestore Security Rules, not key secrecy. The README's test-mode rules allow open read/write for the demo; tighten them if real users sign up.
 
 ## 2. API contract
 
@@ -80,9 +80,9 @@ Errors — always `{ "error": "<human-readable message>" }`:
 
 OpenAI settings: model `OPENAI_MODEL` env or `gpt-4o-mini`, `response_format: {type: "json_object"}`, `temperature: 0.2`, transcript capped at 24,000 chars (~90–120 min of speech) to bound cost/latency. The system prompt forbids inventing quantities — unknown fields come back as `""`.
 
-## 3. Database schema — Back4App Parse
+## 3. Database schema — Firebase Firestore
 
-Class: **`Recipe`** — created automatically on first save (Parse is schemaless; this is the field contract the app writes):
+Collection: **`recipes`** — created automatically on first save (Firestore is schemaless; this is the field contract the app writes):
 
 | Field | Type | Source |
 |---|---|---|
@@ -93,11 +93,13 @@ Class: **`Recipe`** — created automatically on first save (Parse is schemaless
 | `steps` | Array\<Object\> `{order, instruction, duration}` | LLM |
 | `tags` | Array\<String\> | LLM |
 | `videoId`, `videoUrl`, `channelTitle`, `thumbnail` | String | function (oEmbed) |
-| `objectId`, `createdAt`, `updatedAt` | Parse built-ins | Back4App |
+| `createdAt` | Timestamp (`serverTimestamp()`) | Firestore |
 
-Queries used: `new Parse.Query('Recipe').descending('createdAt').limit(100).find()`.
+The document ID (`doc.id`) is used as the recipe's `id` in the UI.
 
-**Suggested CLP** (Back4App → `Recipe` class → Security): Public Read enabled for a read-only demo, or lock everything behind authenticated users if login is added later. For this demo all recipes are app-level shared data.
+Queries used: `query(collection(db,'recipes'), orderBy('createdAt','desc'), limit(100))`, `addDoc`, `deleteDoc`.
+
+**Suggested rules**: the README's test-mode setup allows open read/write for 30 days — fine for a demo. For anything longer, scope reads/writes behind Firebase Auth (`allow read, write: if request.auth != null`).
 
 ## 4. Front-end component breakdown
 
@@ -106,27 +108,28 @@ App.jsx                      state machine: tab | recipe | selected | loading/sa
 ├── LinkForm.jsx             controlled input; regex-validates YouTube host before submit
 ├── RecipeView.jsx           pure renderer; props: recipe, onSave, saving, saved, savedView
 │                            (savedView hides the save button for cookbook entries)
-└── SavedRecipes.jsx         grid; props: recipes, onSelect, onDelete, parseReady
+└── SavedRecipes.jsx         grid; props: recipes, onSelect, onDelete, dbReady
 ```
 
-`src/lib/parse.js` — single Parse SDK init; exports `parseConfigured` flag so the UI degrades gracefully (generate still works, cookbook explains the missing config) instead of crashing.
+`src/lib/firebase.js` — single Firebase app + Firestore init; exports `firebaseConfigured` flag so the UI degrades gracefully (generate still works, cookbook explains the missing config) instead of crashing.
 
-`src/api.js` — the only import site for Parse operations + the function call. Components never touch `fetch` or `Parse` directly.
+`src/api.js` — the only import site for Firestore operations + the function call. Components never touch `fetch` or `firebase/firestore` directly.
 
 ### Data flow
 
 1. `LinkForm` → `App.handleGenerate(url)` → `api.extractRecipe` → `POST` function.
 2. Response stored in `recipe` state → `RecipeView` renders.
-3. `handleSave` → `api.saveRecipe(recipe)` → `Recipe` object created → `saved` flag disables the button.
-4. "My cookbook" tab → `listSavedRecipes` → grid; `onSelect` → `RecipeView` in `savedView` mode; `onDelete` → `obj.destroy()` + local list filter.
+3. `handleSave` → `api.saveRecipe(recipe)` → `addDoc` into `recipes` → `saved` flag disables the button.
+4. "My cookbook" tab → `listSavedRecipes` → grid; `onSelect` → `RecipeView` in `savedView` mode; `onDelete` → `deleteDoc` + local list filter.
 
 ## 5. Configuration reference
 
 | Variable | Where used | Scope |
 |---|---|---|
-| `VITE_PARSE_APP_ID` | `src/lib/parse.js` | client (build-time) |
-| `VITE_PARSE_JS_KEY` | `src/lib/parse.js` | client (build-time) |
-| `VITE_PARSE_SERVER_URL` | `src/lib/parse.js` | client; defaults to `https://parseapi.back4app.com` |
+| `VITE_FIREBASE_API_KEY` | `src/lib/firebase.js` | client (build-time) |
+| `VITE_FIREBASE_PROJECT_ID` | `src/lib/firebase.js` | client (build-time) |
+| `VITE_FIREBASE_APP_ID` | `src/lib/firebase.js` | client (build-time) |
+| `VITE_FIREBASE_AUTH_DOMAIN` | `src/lib/firebase.js` | client; optional, defaults to `<project-id>.firebaseapp.com` |
 | `OPENAI_API_KEY` | `extract-recipe.mjs` | server only |
 | `OPENAI_MODEL` | `extract-recipe.mjs` | server only; optional, default `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | `extract-recipe.mjs` | server only; optional, default `https://api.openai.com/v1` — set to any OpenAI-compatible endpoint (e.g. `https://api.groq.com/openai/v1`) |
