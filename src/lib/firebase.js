@@ -24,14 +24,22 @@ if (firebaseConfigured) {
   db = getFirestore(app);
   auth = getAuth(app);
   // Anonymous sign-in gives every visitor a stable uid without a login wall.
+  // Resolves null if Anonymous auth isn't enabled or sign-in fails — callers
+  // must handle the unauthenticated case instead of hanging.
   readyPromise = new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 8000);
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) {
+        clearTimeout(timer);
         unsub();
         resolve(user);
       }
     });
-    signInAnonymously(auth).catch(() => {});
+    signInAnonymously(auth).catch(() => {
+      clearTimeout(timer);
+      unsub();
+      resolve(null);
+    });
   });
 }
 
