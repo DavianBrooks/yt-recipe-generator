@@ -69,7 +69,7 @@ npm install
 1. Sign in at https://console.firebase.google.com → **Add project** → name it (e.g. `yt-recipes`) → continue (Analytics optional) → **Create project**.
 2. On the project page, click the **web icon `</>`** to register a web app → name it → **Register app**. The `firebaseConfig` shown contains the values you need: `apiKey`, `projectId`, `appId`.
 3. Left sidebar → **Build → Firestore Database** → **Create database** → pick a location → **Start in test mode**.
-4. **Build → Authentication → Get started → Sign-in method** → enable **Anonymous** — the app signs every visitor in anonymously so each browser gets its own cookbook.
+4. **Build → Authentication → Get started → Sign-in method** → enable **Anonymous** and **Email/Password** — guests get an anonymous cookbook that carries over when they create an account on the landing page.
 5. **Firestore Database → Rules** tab → paste the contents of [`firestore.rules`](firestore.rules) → **Publish**. (Own-cookbook read/write + public read only for recipes explicitly shared.)
 
 No collections are needed up front — the `recipes` collection is created automatically on the first save.

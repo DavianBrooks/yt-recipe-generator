@@ -11,7 +11,8 @@ import {
   saveRecipe,
   shareRecipe,
 } from './api';
-import { authReady, firebaseConfigured } from './lib/firebase';
+import AuthPanel from './components/AuthPanel';
+import { authReady, currentUser, firebaseConfigured, onUser } from './lib/firebase';
 
 export default function App() {
   const [tab, setTab] = useState('generate');
@@ -26,6 +27,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [savedRecipes, setSavedRecipes] = useState([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [user, setUser] = useState(() => currentUser());
 
   // Shared-recipe deep link: ?r=<firestore doc id>
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function App() {
   // Sign in anonymously up-front so saving/listing never waits on auth
   useEffect(() => {
     authReady();
+    return onUser(setUser);
   }, []);
 
   const refreshSaved = useCallback(async () => {
@@ -60,6 +63,11 @@ export default function App() {
   useEffect(() => {
     if (tab === 'saved') refreshSaved();
   }, [tab, refreshSaved]);
+
+  // Switching accounts (or signing out → fresh guest uid) reloads the cookbook
+  useEffect(() => {
+    if (tab === 'saved') refreshSaved();
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleGenerate(url) {
     setLoading(true);
@@ -176,6 +184,7 @@ export default function App() {
       {notice && <div className="banner ok">{notice}</div>}
 
       <main>
+        {firebaseConfigured && <AuthPanel user={user} />}
         {tab === 'generate' && (
           <>
             <LinkForm onSubmit={handleGenerate} loading={loading} />
