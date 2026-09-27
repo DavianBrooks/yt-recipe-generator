@@ -16,17 +16,26 @@ import { extractVideoId } from './lib/videoId';
 const NOT_CONFIGURED =
   'Firebase is not configured. Set VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_APP_ID in your environment.';
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isRateLimit = (msg) => /rate limit|tokens per minute|too many requests|429/i.test(msg || '');
+
 export async function extractRecipe(videoUrl) {
-  const res = await fetch('/.netlify/functions/extract-recipe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: videoUrl }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || `Recipe extraction failed (HTTP ${res.status})`);
+  // Groq's free tier caps output tokens/min — big recipes can trip it.
+  // Retry with backoff so the transient limit resolves itself.
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await sleep(20000 * attempt);
+    const res = await fetch('/.netlify/functions/extract-recipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: videoUrl }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) return data;
+    lastErr = new Error(data.error || `Recipe extraction failed (HTTP ${res.status})`);
+    if (!isRateLimit(lastErr.message)) throw lastErr;
   }
-  return data;
+  throw lastErr;
 }
 
 /** Returns a previously generated recipe for this videoId, or null. */
