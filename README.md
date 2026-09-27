@@ -7,7 +7,7 @@ Paste a YouTube link → the app pulls the video's captions and metadata → an 
 Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline), and **Firebase Cloud Firestore** for storage.
 
 **Live app:** https://yt-recipe-generator-davian.netlify.app
-**Demo video:** https://app.devin.ai/attachments/5df32a0b-6ee7-448f-9dbc-3b59cabfe3e7/rec-917619be-80e0-4e4f-b3ba-5f8e8348716b-edited.mp4 — walkthrough of the UI, collage background, cookbook, and share view. (Replace with your own recorded demo for the final presentation.)
+**Demo video:** https://youtu.be/91BRla6zsdU
 
 ## Features
 
