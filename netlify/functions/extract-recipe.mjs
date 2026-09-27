@@ -42,6 +42,29 @@ async function fetchTranscript(videoId) {
     .trim();
 }
 
+// Supadata transcript API (https://supadata.ai) — fetches captions from its own
+// IPs and can AI-generate a transcript when the video has none. Used as the
+// middle tier when direct YouTube fetches are blocked (e.g. datacenter IPs).
+async function fetchSupadataTranscript(videoId) {
+  const url = `https://api.supadata.ai/v1/youtube/transcript?url=${encodeURIComponent(
+    `https://www.youtube.com/watch?v=${videoId}`,
+  )}&text=true`;
+  const res = await fetch(url, {
+    headers: { 'x-api-key': process.env.SUPADATA_API_KEY },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || `Supadata failed (HTTP ${res.status})`);
+  }
+  const text =
+    typeof data.content === 'string'
+      ? data.content
+      : Array.isArray(data.content)
+        ? data.content.map((c) => c.text || '').join(' ')
+        : '';
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 // No-captions fallback: pull the audio track and transcribe it with Whisper.
 // Works on OpenAI (whisper-1) and Groq (whisper-large-v3-turbo).
 // Best-effort: YouTube increasingly requires a proof-of-origin token on
@@ -180,24 +203,27 @@ export const handler = async (event) => {
     if (e instanceof YoutubeTranscriptVideoUnavailableError) {
       return json(404, { error: 'That YouTube video is unavailable or private.' });
     }
-    if (
-      e instanceof YoutubeTranscriptDisabledError ||
-      e instanceof YoutubeTranscriptNotAvailableError
-    ) {
-      // No captions — fall back to transcribing the audio with Whisper.
+    // Any other transcript failure — no captions, or YouTube blocking this
+    // host (AWS/Netlify IPs get bot-walled): try Supadata, then Whisper.
+    const errors = [];
+    if (process.env.SUPADATA_API_KEY) {
+      try {
+        transcript = await fetchSupadataTranscript(videoId);
+      } catch (se) {
+        errors.push(`Supadata: ${se.message}`);
+      }
+    }
+    if (!transcript) {
       try {
         transcript = await transcribeAudio(videoId);
       } catch (we) {
-        return json(422, {
-          error: `No captions on this video, and audio transcription failed (${we.message}). Try a video with subtitles enabled.`,
-        });
+        errors.push(`audio transcription: ${we.message}`);
       }
-      if (!transcript) {
-        return json(422, { error: 'Audio transcription produced no text.' });
-      }
-    } else {
-      return json(502, {
-        error: 'Could not fetch the video transcript — YouTube may be blocking server requests.',
+    }
+    if (!transcript) {
+      const detail = errors.length ? ` (${errors.join('; ')})` : '';
+      return json(422, {
+        error: `Could not get a transcript for this video${detail}. Try a video with subtitles enabled.`,
       });
     }
   }

@@ -76,7 +76,8 @@ Errors — always `{ "error": "<human-readable message>" }`:
 |---|---|---|
 | `GET youtube.com/oembed?url=…&format=json` | channel title + thumbnail | none |
 | `YoutubeTranscript.fetchTranscript(videoId)` | full caption text | none |
-| `youtubei.js` stream + `POST $OPENAI_BASE_URL/audio/transcriptions` | Whisper fallback when captions are missing (best-effort — YouTube may require a PoToken on datacenter IPs; `WHISPER_MODEL` env, default `whisper-large-v3-turbo`) | `OPENAI_API_KEY` |
+| `GET api.supadata.ai/v1/youtube/transcript?url=…&text=true` | caption fallback — YouTube bot-walls datacenter IPs, so on Netlify this tier usually wins; can also AI-transcribe caption-less videos. Only runs when `SUPADATA_API_KEY` is set | `SUPADATA_API_KEY` |
+| `youtubei.js` stream + `POST $OPENAI_BASE_URL/audio/transcriptions` | last-resort Whisper fallback (best-effort — YouTube may require a PoToken on datacenter IPs; `WHISPER_MODEL` env, default `whisper-large-v3-turbo`) | `OPENAI_API_KEY` |
 | `POST $OPENAI_BASE_URL/chat/completions` (default api.openai.com) | transcript → structured JSON | `OPENAI_API_KEY` |
 
 OpenAI settings: model `OPENAI_MODEL` env or `gpt-4o-mini`, `response_format: {type: "json_object"}`, `temperature: 0.2`, transcript capped at 24,000 chars (~90–120 min of speech) to bound cost/latency. The system prompt forbids inventing quantities — unknown fields come back as `""`.
@@ -142,6 +143,7 @@ App.jsx                      state machine + ?r= shared-view route + cache check
 | `OPENAI_MODEL` | `extract-recipe.mjs` | server only; optional, default `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | `extract-recipe.mjs` | server only; optional, default `https://api.openai.com/v1` — set to any OpenAI-compatible endpoint (e.g. `https://api.groq.com/openai/v1`) |
 | `WHISPER_MODEL` | `extract-recipe.mjs` | server only; optional, default `whisper-large-v3-turbo` (`whisper-1` on OpenAI) |
+| `SUPADATA_API_KEY` | `extract-recipe.mjs` | server only; optional — Supadata transcript fallback (recommended on Netlify where YouTube blocks server IPs) |
 
 `netlify.toml`: `command = "npm run build"`, `publish = "dist"`, `functions = "netlify/functions"`, plus a non-forced `/* → /index.html` SPA fallback (function routes resolve before redirects, so `/.netlify/functions/*` is unaffected).
 
