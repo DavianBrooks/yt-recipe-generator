@@ -21,6 +21,37 @@ body {
   margin: 0;
 }
 
+/* Fixed 12-photo food collage behind everything, with a soft cream veil
+   so foreground content stays readable */
+.food-collage {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.food-collage div {
+  background-size: cover;
+  background-position: center;
+}
+
+.food-collage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(250, 247, 242, 0.78);
+  backdrop-filter: blur(2px);
+}
+
+@media (max-width: 640px) {
+  .food-collage {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+  }
+}
+
 .app {
   max-width: 860px;
   margin: 0 auto;
