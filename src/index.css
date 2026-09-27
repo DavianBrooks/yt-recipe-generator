@@ -381,6 +381,184 @@ button:disabled {
   margin-top: 48px;
 }
 
+/* ---- auth panel ---- */
+
+.auth-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+
+.auth-panel.signed-in {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.92rem;
+}
+
+.auth-hint {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.auth-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.auth-form input {
+  flex: 1;
+  min-width: 160px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: var(--bg);
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-actions button[type='submit'] {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-actions button.secondary {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auth-ok {
+  color: var(--ok);
+  font-size: 0.85rem;
+  margin: 8px 0 0;
+}
+
+/* ---- post-MVP features ---- */
+
+.recipe-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.recipe-actions button.secondary {
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.recipe-actions button.secondary:hover:not(:disabled) {
+  background: #f7ece7;
+}
+
+.edit-field {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: var(--bg);
+}
+
+.edit-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.edit-meta input {
+  width: 120px;
+}
+
+.ing-edit {
+  display: grid;
+  grid-template-columns: 60px 60px 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+}
+
+.step-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-edit .edit-field[type='text'],
+.step-edit input {
+  max-width: 140px;
+}
+
+.cookbook-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.cookbook-filters .search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: var(--surface);
+}
+
+.cookbook-filters select {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* Print / PDF export: only the recipe card prints */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .recipe-card,
+  .recipe-card * {
+    visibility: visible;
+  }
+  .recipe-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none;
+    box-shadow: none;
+  }
+  .recipe-actions,
+  .back-btn {
+    display: none;
+  }
+  .recipe-thumb {
+    max-width: 200px;
+  }
+}
+
 @media (max-width: 640px) {
   .recipe-header {
     flex-direction: column;
