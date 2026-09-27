@@ -6,6 +6,9 @@ Paste a YouTube link → the app pulls the video's captions and metadata → an 
 
 Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline), and **Firebase Cloud Firestore** for storage.
 
+**Live app:** https://yt-recipe-generator-davian.netlify.app
+**Demo video:** https://app.devin.ai/attachments/5df32a0b-6ee7-448f-9dbc-3b59cabfe3e7/rec-917619be-80e0-4e4f-b3ba-5f8e8348716b-edited.mp4 — walkthrough of the UI, collage background, cookbook, and share view. (Replace with your own recorded demo for the final presentation.)
+
 ## Features
 
 - Submit any valid YouTube URL (watch, share/`youtu.be`, Shorts, embed links)
@@ -25,7 +28,7 @@ Built with **React + Vite**, **Netlify serverless functions** (the AI pipeline),
 | Layer | Choice | Why |
 |---|---|---|
 | Front-end | **React 19 + Vite** | Largest ecosystem and community for a beginner project; Vite gives instant dev server + one-command build; pairs natively with Netlify. |
-| AI processing | **YouTube captions + OpenAI (`gpt-4o-mini`)** | Captions (`youtube-transcript`) are free and fast; the LLM turns unstructured narration into strict JSON via `response_format: json_object`. |
+| AI processing | **YouTube captions + Groq (`qwen/qwen3.8-27b`)** | Captions (`youtube-transcript`) are free and fast; the LLM turns unstructured narration into strict JSON via `response_format: json_object`. Any OpenAI-compatible endpoint works (`OPENAI_BASE_URL`/`OPENAI_MODEL`); Supadata (`SUPADATA_API_KEY`) covers caption fetches YouTube blocks from datacenter IPs. |
 | API | **Netlify Function** (`netlify/functions/extract-recipe.mjs`) | Keeps `OPENAI_API_KEY` server-side; zero server management; deploys with the site. |
 | Database | **Firebase Cloud Firestore + Auth** | Managed NoSQL with a JS SDK and a free tier; anonymous sign-in scopes every cookbook to a stable uid with no login wall. |
 | Hosting | **Netlify** | Free static hosting + serverless functions + env-var management in one place. |
